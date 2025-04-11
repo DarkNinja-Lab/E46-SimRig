@@ -3,22 +3,24 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include "mcp2515_can.h"
+#include <mcp_can.h>
 
 // Set Canbus Pin
 const int SPI_CS_PIN = 9;
-mcp2515_can CAN(SPI_CS_PIN); // Set CS pin
+MCP_CAN CAN(SPI_CS_PIN); // Set CS pin
 
 // Set kBus
-#define kbus Serial
+#define kbus Serial2
 
 // Set Speedo Pin
 #define SPEED_PIN 46
 
 // Set Relay Pins
-int pinABS = 14;
-int pinParkingpbrake = 15;
-int pinClusterlight = 16;
+int pinABS = 44;
+int pinParkingpbrake = 40;
+int pinClusterlight = 42;
+
+
 
 // Custom Variables
 int hibeam = 0; //2
@@ -89,6 +91,9 @@ int watertemp_beam = 0;
 int lowhighbeam_beam = 0;
 int highbeam_beam = 0;
 int tclight_beam = 0;
+String currentDateTime; // Aktuelle Uhrzeit als String
+int hour, minute, second; // Einzelne Teile der Uhrzeit
+
 
 String gear;
 int showLights = 0;
@@ -96,67 +101,38 @@ int showLights = 0;
 String Game = "ETS2";
 
 // Backlight Options
-int inputIngameoption = 49;
-int inputHardwareoption = 50;
-int inputAlwaysonoption = 51;
-int inputHardwareswitch = 53;
+int inputIngameoption = 30;
+int inputHardwareoption = 32;
+int inputAlwaysonoption = 34;
+int inputHardwareswitch = 36;
 
 class SHCustomProtocol {
 private:
 
 public:
 
-  /*
-  CUSTOM PROTOCOL CLASS
-  SEE https://github.com/zegreatclan/SimHub/wiki/Custom-Arduino-hardware-support
-
-  GENERAL RULES :
-    - ALWAYS BACKUP THIS FILE, reinstalling/updating SimHub would overwrite it with the default version.
-    - Read data AS FAST AS POSSIBLE in the read function
-    - NEVER block the arduino (using delay for instance)
-    - Make sure the data read in "read()" function READS ALL THE DATA from the serial port matching the custom protocol definition
-    - Idle function is called hundreds of times per second, never use it for slow code, arduino performances would fall
-    - If you use library suspending interrupts make sure to use it only in the "read" function when ALL data has been read from the serial port.
-      It is the only interrupt safe place
-
-  COMMON FUNCTIONS :
-    - FlowSerialReadStringUntil('\n')
-      Read the incoming data up to the end (\n) won't be included
-    - FlowSerialReadStringUntil(';')
-      Read the incoming data up to the separator (;) separator won't be included
-    - FlowSerialDebugPrintLn(string)
-      Send a debug message to simhub which will display in the log panel and log file (only use it when debugging, it would slow down arduino in run conditions)
-
-  */
-
-  // Called when starting the arduino (setup method in main sketch)
   void setup() {
 
-// Input Definition
   pinMode(inputIngameoption, INPUT_PULLUP);
   pinMode(inputHardwareoption, INPUT_PULLUP);
   pinMode(inputAlwaysonoption, INPUT_PULLUP);
-  pinMode(inputHardwareswitch, INPUT_PULLUP);
-  
-// Output Definition
+  pinMode(inputHardwareswitch, INPUT_PULLUP);  
   pinMode(pinABS, OUTPUT);
   pinMode(pinParkingpbrake, OUTPUT);
   pinMode(pinClusterlight, OUTPUT);
-// // Output Set
   digitalWrite(pinABS, HIGH);
   digitalWrite(pinParkingpbrake, HIGH);
   digitalWrite(pinClusterlight, HIGH);
     
     pinMode(SPEED_PIN, OUTPUT);
-    fuelgauge.attach(10);
-    fuelgauge.write(0);
+
 
     kbus.begin(9600, SERIAL_8E1);
 
-   CAN.begin(CAN_500KBPS); // init can bus : baudrate = 500k
+   CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ);
+   CAN.setMode(MCP_NORMAL);
   }
 
-  // Called when new data is coming from computer
   void read() {
     // EXAMPLE 1 - read the whole message and sent it back to simhub as debug message
     // Protocol formula can be set in simhub to anything, it will just echo it
@@ -203,6 +179,12 @@ public:
       highbeam_beam = FlowSerialReadStringUntil(';').toInt();
       tclight_beam = FlowSerialReadStringUntil(';').toInt();
       Game = FlowSerialReadStringUntil('\n');
+      currentDateTime = FlowSerialReadStringUntil(';'); // Datum und Uhrzeit als String
+      // Beispiel, wie man die Uhrzeit trennt:
+      hour = currentDateTime.substring(0, 2).toInt();
+      minute = currentDateTime.substring(3, 5).toInt();
+      second = currentDateTime.substring(6, 8).toInt();
+
   
     /*
     // -------------------------------------------------------
@@ -219,55 +201,22 @@ public:
     */
   }
 
-  // Called once per arduino loop, timing can't be predicted, 
-  // but it's called between each command sent to the arduino
  
   void loop() {
   
-// ##############
-// START GAMEDATA
-// ##############
-// Start pCars
-if(Game.equalsIgnoreCase("pCars")) {
+    // Hier holst du die Uhrzeit von SimHub
+    currentDateTime = FlowSerialReadStringUntil(';');
+    hour = currentDateTime.substring(0, 2).toInt();
+    minute = currentDateTime.substring(3, 5).toInt();
+    second = currentDateTime.substring(6, 8).toInt();
 
-if (oilpress <= 0.2) {
-  DME4_Load3 = 0x02;
-} else if(Temp >= 120) {
-  DME4_Load3 = 0x08;
-} else {
-  DME4_Load3 = 0x00;
-}
+    // Senden der Uhrzeit über den K-Bus
+    byte timeDataKbus[] = {hour, minute, second, 0x00, 0x00, 0x00, 0x00};
+    sendKbus(timeDataKbus);
 
-if((pcars_mcarflags == 3) || (pcars_mcarflags == 131) || (pcars_mcarflags == 11)){
-  LightByte2 = 0x30;
-} else {
-  LightByte2 = 0x00;
-}
 
-// Cluster Backlight Ingame
-if(digitalRead(inputIngameoption) == LOW){
-if((pcars_mcarflags == 3) || (pcars_mcarflags == 131) || (pcars_mcarflags == 11)) {
-digitalWrite(pinClusterlight, LOW);  
-}
-else {
-digitalWrite(pinClusterlight, HIGH);
-}
-}
-
-if (checkEngine_PCARS < "0.2") {
-  DME4_Load0 = 0x00;
-} 
-else {
-  DME4_Load0 = 0x02;
-}
-
-  DME4_Load5 = 0x00;
-
-}
-// End pCars
-
-// Start Assetto Corsa Competizione
-if(Game.equalsIgnoreCase("AssettoCorsaCompetizione")) {
+// Start Assetto Corsa 
+if(Game.equalsIgnoreCase("AssettoCorsa")) {
 
   DME4_Load3 = 0x00;
   DME4_Load5 = 0x00;
@@ -296,7 +245,7 @@ if(acc_flashlight == 1) {
   
 }
 
-// End Assetto Corsa Competizione
+// End Assetto Corsa
 
 // Start ETS
 if(Game.equalsIgnoreCase("ETS2") || Game.equalsIgnoreCase("ATS")) {
@@ -373,183 +322,8 @@ else {
 }
 // End ETS2
 
-// Start Forza Horizon 5
-if(Game.equalsIgnoreCase("FH5")) {
-
-LightByte1 = 0x00; // Lights not supported by game
-
-//No lighting Informations
-LightByte2 = 0x00;
-if(digitalRead(inputIngameoption) == LOW){
-digitalWrite(pinClusterlight, LOW);  
-}
-
-DME4_Load3 = 0x00; // Oilpressure not supported by game
-DME4_Load0 = 0x00; // Enginedamage not known the values at the moment
-DME4_Load5 = 0x00; // Battery Warning not supported by game
-
-// Handbrake
-if (handbrake > 1) {
-  digitalWrite(pinParkingpbrake, LOW);  
-} 
-else {
-  digitalWrite(pinParkingpbrake, HIGH);  
-}
-
-
-}
-// End Forza Horizon 5
-
-// Start Fernbus Simulator
-if(Game.equalsIgnoreCase("FernbusSimulator")) {
-
-if(lights_fs.equalsIgnoreCase("true")) {
-  LightByte2 = 0x30;
-} else {
-  LightByte2 = 0x00;
-}
-
-// Cluster Backlight Ingame
-if(digitalRead(inputIngameoption) == LOW){
-if(lights_fs.equalsIgnoreCase("true")) {
-digitalWrite(pinClusterlight, LOW);  
-}
-else {
-digitalWrite(pinClusterlight, HIGH);
-}
-}
-
-if (engine_fs.equalsIgnoreCase("False")) {
-  DME4_Load5 = 0x00;
-} else if (batWarning.equalsIgnoreCase("0")) {
-  DME4_Load5 = 0x00;
-} else {
-  DME4_Load5 = 0x01;     
-}
-
-// Cruisecontrol and Enginecheck
-if (cruise_fs.equalsIgnoreCase("True")) {
-  DME4_Load0 = 0x08;
-} else {
-  DME4_Load0 = 0x00;
-}
-
-// Indicators Left / Right
-if((turnright_fs == 0) && (turnleft_fs == 0)) {
-  LightByte1 = 0x00;
-} else if((turnright_fs > 0) && (turnleft_fs == 0)) {
-  LightByte1 = 0x40;
-} else if((turnright_fs == 0) && (turnleft_fs > 0)) {
-  LightByte1 = 0x20;
-} else if((turnright_fs > 0) && (turnleft_fs > 0)) {
-  LightByte1 = 0x60;
-}
-  
-// Handbrake
-if (handbrake > 1) {
-  digitalWrite(pinParkingpbrake, LOW);  
-} 
-else {
-  digitalWrite(pinParkingpbrake, HIGH);  
-}
-
-DME4_Load3 = 0x00;
-
-}
-// End Fernbus Simulator
-
-// Start BeamNG
-if(Game.equalsIgnoreCase("BeamNgDrive")) {
-      
-// Low Light
-if(lowhighbeam_beam == 1) {
-  LightByte2 = 0x30;
-} else {
-  LightByte2 = 0x00;
-}
-
-// Cluster Backlight Ingame
-if(digitalRead(inputIngameoption) == LOW){
-if(lowhighbeam_beam == 1) {
-digitalWrite(pinClusterlight, LOW);  
-} else {
-digitalWrite(pinClusterlight, HIGH);
-}}
-
-// Remap Watertemp
-Temp = watertemp_beam;
-
-// Overheat light
-if(Temp >= 120) {
-  DME4_Load3 = 0x08;
-} else {
-  DME4_Load3 = 0x00;
-}
-
-// Turn sisgnals + high beam + foglight
-if((turnleft_beam == 0) && (turnright_beam == 0) && (highbeam_beam == 1) && (foglight_beam == 0)) {
-  LightByte1 = 0x04;
-} else if((turnleft_beam == 0) && (turnright_beam == 1) && (highbeam_beam == 0) && (foglight_beam == 0)) {
-  LightByte1 = 0x40;
-} else if((turnleft_beam == 1) && (turnright_beam == 0) && (highbeam_beam == 0) && (foglight_beam == 0)) {
-  LightByte1 = 0x20;
-} else if((turnleft_beam == 1) && (turnright_beam == 1) && (highbeam_beam == 0) && (foglight_beam == 0)) {
-  LightByte1 = 0x60;
-} else if((turnleft_beam == 0) && (turnright_beam == 1) && (highbeam_beam == 1) && (foglight_beam == 0)) {
-  LightByte1 = 0x44;
-} else if((turnleft_beam == 1) && (turnright_beam == 0) && (highbeam_beam == 1) && (foglight_beam == 0)) {
-  LightByte1 = 0x24;
-} else if((turnleft_beam == 1) && (turnright_beam == 1) && (highbeam_beam == 1) && (foglight_beam == 0)) {
-  LightByte1 = 0x64;
-} else if((turnleft_beam == 0) && (turnright_beam == 0) && (highbeam_beam == 1) && (foglight_beam == 1)) {
-  LightByte1 = 0x14;
-} else if((turnleft_beam == 0) && (turnright_beam == 1) && (highbeam_beam == 0) && (foglight_beam == 1)) {
-  LightByte1 = 0x58;
-} else if((turnleft_beam == 1) && (turnright_beam == 0) && (highbeam_beam == 0) && (foglight_beam == 1)) {
-  LightByte1 = 0x38;
-} else if((turnleft_beam == 1) && (turnright_beam == 1) && (highbeam_beam == 0) && (foglight_beam == 1)) {
-  LightByte1 = 0x78;
-} else if((turnleft_beam == 0) && (turnright_beam == 1) && (highbeam_beam == 1) && (foglight_beam == 1)) {
-  LightByte1 = 0x54;
-} else if((turnleft_beam == 1) && (turnright_beam == 0) && (highbeam_beam == 1) && (foglight_beam == 1)) {
-  LightByte1 = 0x34;
-} else if((turnleft_beam == 1) && (turnright_beam == 1) && (highbeam_beam == 1) && (foglight_beam == 1)) {
-  LightByte1 = 0x74;
-} else if((turnleft_beam == 0) && (turnright_beam == 0) && (highbeam_beam == 0) && (foglight_beam == 1)) {
-  LightByte1 = 0x08;
-} else {
-  LightByte1 = 0x00;
-}
-
-// ABS Light
-if(abslight_beam == 1) {
-  absWarning = 0;
-} else if(abslight_beam == 0) {
-  absWarning = 1;
-}
-
-// Oilwarn
-if(oillight_beam == 1) {
-  DME4_Load0 = 0x02;
-} else {
-  DME4_Load0 = 0x00;
-}
-
-// Handbrake
-if(parkingbreak_beam == 1) {
-  digitalWrite(pinParkingpbrake, LOW);
-} else {
-  digitalWrite(pinParkingpbrake, HIGH);
-}
-
-// Remap DSC
-dscSwitch = tclight_beam;
-
-}
-// End BeamNG
-
 // No Game Data
-if(Game.equalsIgnoreCase("ETS2") || Game.equalsIgnoreCase("ATS") || Game.equalsIgnoreCase("AssettoCorsaCompetizione") || Game.equalsIgnoreCase("pCars") || Game.equalsIgnoreCase("FH5") || Game.equalsIgnoreCase("FernbusSimulator") || Game.equalsIgnoreCase("BeamNgDrive")) {
+if(Game.equalsIgnoreCase("ETS2") || Game.equalsIgnoreCase("AssettoCorsa")) {
   
 } else {
   digitalWrite(pinParkingpbrake, HIGH);
@@ -601,28 +375,6 @@ else {
 digitalWrite(pinABS, LOW);
 }
 
-// Gear indicator for numbers
-if (gear.equalsIgnoreCase("1")) {
-  AT_Gear = 0x01;
-} else if (gear.equalsIgnoreCase("2")) {
-  AT_Gear = 0x02;
-} else if (gear.equalsIgnoreCase("3")) {
-  AT_Gear = 0x03;
-} else if (gear.equalsIgnoreCase("4")) {
-  AT_Gear = 0x04;
-} else if (gear.equalsIgnoreCase("5")) {
-  AT_Gear = 0x09;
-} else if (gear.equalsIgnoreCase("6")) {
-  AT_Gear = 0x0A;
-} else if (gear.equalsIgnoreCase("R")) {
-  AT_Gear = 0x07;
-} else if (gear.equalsIgnoreCase("N")) {
-  AT_Gear = 0x06;
-}
-
-// ############
-// END GAMEDATA
-// ############
 
 Speedometer();
 
@@ -693,7 +445,8 @@ Speedometer();
   
   byte mes1[] = {0xD0, 0x08, 0xBF, 0x5B, LightByte1, 0x00, 0x00, LightByte2, 0x00, 0x58, 0x00};
   sendKbus(mes1);
-    
+
+  
   }
 
   // Called once between each byte read on arduino,

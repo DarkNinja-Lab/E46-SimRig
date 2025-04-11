@@ -1,0 +1,18 @@
+Pinout für BMW M3 e46 Cluster
+
+1.  Ground
+
+4.  12V Constant
+5.  12V On and Start (Engine Start Button)
+6.  12V Accessories
+7.  Cluster Backlight
+
+
+9.  CAN Bus High
+10. CAN Bus Low
+
+14. K-Bus
+18. Service Interval Indicator Reset
+19. Wheel Speed, Rear Left
+22. ABS Light
+23. Parkbrake

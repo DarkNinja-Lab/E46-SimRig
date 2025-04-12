@@ -27,11 +27,6 @@ Dieses Repository enthält alles für den Bau eines BMW E46 SimRigs – perfekt 
 - Handbremse (ich habe die vom e46 genommen, es befindet sich ein auf masse kontakt an dem Handbrems Hebel)
 
 ### Links:
-- Arduino Mega KiCadIcons https://github.com/Alarm-Siren/arduino-kicad-library/releases/tag/v4.2.0
-- SimHub https://www.simhubdash.com
-- 
-
-
-
----
-Ideal für Sim-Racer, Modder & Technikbegeisterte. Pull Requests willkommen! 🚗🎮🔥
+- [Arduino Mega KiCadIcons](https://github.com/Alarm-Siren/arduino-kicad-library/releases/tag/v4.2.0)
+- [SimHub Download](https://www.simhubdash.com)
+- [Cluster Warn Leuchten Bedeutung](https://djoos.de/bmw-tacho-symbole/)
